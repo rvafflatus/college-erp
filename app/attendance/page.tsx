@@ -3,7 +3,6 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase Connection
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -12,6 +11,7 @@ const supabase = createClient(
 export default function AttendancePage() {
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
   // Fetch real data from your Supabase table
   useEffect(() => {
@@ -23,7 +23,13 @@ export default function AttendancePage() {
           .order('roll_number', { ascending: true });
         
         if (error) throw error;
-        setStudents(data || []);
+        
+        // Add a default local state status 'Present' for tracking toggles
+        const trackingData = (data || []).map(student => ({
+          ...student,
+          status: 'Present' 
+        }));
+        setStudents(trackingData);
       } catch (error) {
         console.error('Error connecting to database:', error);
       } finally {
@@ -33,10 +39,43 @@ export default function AttendancePage() {
     fetchStudents();
   }, []);
 
+  // Toggle internal tracking array between Present and Absent
+  const toggleStatus = (id: number) => {
+    setStudents(prev => prev.map(student => {
+      if (student.id === id) {
+        return { ...student, status: student.status === 'Present' ? 'Absent' : 'Present' };
+      }
+      return student;
+    }));
+  };
+
+  // Submit logs down to the backend database
+  const handleSubmitLogs = async () => {
+    setSubmitting(true);
+    try {
+      // Build rows for batch injection
+      const logRows = students.map(student => ({
+        student_id: student.id,
+        status: student.status
+      }));
+
+      const { error } = await supabase
+        .from('attendance_logs')
+        .insert(logRows);
+
+      if (error) throw error;
+
+      alert('Shabaash! Attendance logs synchronized with cloud servers.');
+    } catch (error) {
+      console.error('Error submitting records:', error);
+      alert('Submission failed. Check your database network connection.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-slate-50 flex flex-col items-center">
-      
-      {/* Synchronized Header Banner */}
       <header className="w-full bg-cyan-800 text-white px-6 py-4 md:px-12 flex flex-col md:flex-row justify-between items-start md:items-center shadow-md">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Afflatus ERP</h1>
@@ -49,18 +88,16 @@ export default function AttendancePage() {
         </Link>
       </header>
 
-      {/* Main Student Roster Body */}
       <section className="w-full max-w-4xl px-4 py-12 flex-grow">
         <div className="text-center mb-8">
           <h2 className="text-3xl font-extrabold text-slate-800 mb-2">
             Daily Attendance Roster
           </h2>
           <p className="text-slate-500 font-medium">
-            Select student metrics below to log live database verification.
+            Toggle indicators and submit to save historical logs to the cloud database.
           </p>
         </div>
 
-        {/* Database Load Handling */}
         {loading ? (
           <div className="flex flex-col items-center justify-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-800 mb-4"></div>
@@ -83,22 +120,28 @@ export default function AttendancePage() {
                       </p>
                     </div>
                     
-                    {/* Toggle Indicator Button */}
-                    <button className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/60 px-5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm transition-all">
-                      Present
+                    <button 
+                      onClick={() => toggleStatus(student.id)}
+                      className={`border px-5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm transition-all ${
+                        student.status === 'Present' 
+                          ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200/60' 
+                          : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border-rose-200/60'
+                      }`}
+                    >
+                      {student.status}
                     </button>
                   </div>
                 ))
               )}
             </div>
             
-            {/* Form Footer Execution Action */}
             <div className="bg-slate-50/50 border-t border-slate-100 p-4 flex justify-end">
               <button 
-                onClick={() => alert('Attendance metrics cached successfully for Level 1 demo!')}
-                className="bg-cyan-800 hover:bg-cyan-900 text-white font-bold text-sm uppercase tracking-wider px-6 py-2.5 rounded-xl shadow-sm transition-all"
+                onClick={handleSubmitLogs}
+                disabled={submitting || students.length === 0}
+                className="bg-cyan-800 hover:bg-cyan-900 disabled:bg-slate-300 text-white font-bold text-sm uppercase tracking-wider px-6 py-2.5 rounded-xl shadow-sm transition-all"
               >
-                Submit Logs
+                {submitting ? 'Saving to Database...' : 'Submit Logs'}
               </button>
             </div>
           </div>
