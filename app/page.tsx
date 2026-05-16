@@ -1,45 +1,24 @@
-"use client";
-import { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import Link from 'next/link';
 
-// This connects the website to your Supabase keys
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-export default function AttendancePage() {
-  const [students, setStudents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function fetchStudents() {
-      const { data, error } = await supabase.from('students').select('*');
-      if (error) console.error('Error fetching:', error);
-      else setStudents(data || []);
-      setLoading(false);
-    }
-    fetchStudents();
-  }, []);
-
-  if (loading) return <div className="p-10 text-center">Loading Students...</div>;
-
+export default function Home() {
   return (
-    <div className="p-4 max-w-md mx-auto">
-      <h1 className="text-2xl font-bold mb-4 text-blue-800">Afflatus Attendance</h1>
-      <div className="space-y-3">
-        {students.map((student) => (
-          <div key={student.id} className="flex justify-between items-center p-3 border rounded-lg bg-white shadow-sm">
-            <div>
-              <p className="font-bold">{student.name}</p>
-              <p className="text-sm text-gray-500">Roll: {student.roll_number}</p>
-            </div>
-            <button className="bg-green-100 text-green-800 px-4 py-1 rounded-full text-sm font-semibold">
-              Present
-            </button>
-          </div>
-        ))}
+    <main className="min-h-screen bg-gray-50 p-8 flex flex-col items-center justify-center">
+      <h1 className="text-4xl font-bold text-blue-900 mb-4 text-center">
+        Afflatus College ERP
+      </h1>
+      <p className="text-gray-600 mb-8 text-lg">Digital Management System</p>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl">
+        <Link href="/attendance" className="p-6 bg-white rounded-xl shadow-md hover:shadow-lg border-t-4 border-blue-600 transition-all">
+          <h2 className="text-xl font-bold mb-2">Student Attendance</h2>
+          <p className="text-gray-500">Mark and track daily presence of students.</p>
+        </Link>
+
+        <div className="p-6 bg-gray-100 rounded-xl border border-dashed border-gray-400 opacity-60">
+          <h2 className="text-xl font-bold mb-2 text-gray-400">Fees Management (Coming Soon)</h2>
+          <p className="text-gray-400">Track pending fees and generate receipts.</p>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }
