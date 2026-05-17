@@ -116,7 +116,7 @@ export default function Home() {
         </div>
         <div className="flex items-center gap-4 mt-3 md:mt-0">
           <div className="bg-white/20 backdrop-blur-sm border border-white/30 text-xs font-bold uppercase tracking-wider px-4 py-1.5 rounded-full">
-            Level 2 Secure Portal
+            Level 3 Secure Portal
           </div>
           <button 
             onClick={handleLogout}
@@ -136,35 +136,50 @@ export default function Home() {
           System ready for 500 Students & 50 Teachers.
         </p>
 
-        {/* Dashboard Grid Options */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto mb-10">
+        {/* Dashboard Grid Options (Now 3 Columns for Balance) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto mb-10">
           
           {/* CARD 1: ATTENDANCE */}
           <Link href="/attendance" className="group block cursor-pointer">
-            <div className="p-8 bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-xl hover:border-cyan-500/30 transition-all duration-300 text-center flex flex-col items-center justify-center h-48">
-              <span className="text-5xl mb-4 group-hover:scale-110 transition-transform duration-300">
+            <div className="p-6 bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-xl hover:border-cyan-500/30 transition-all duration-300 text-center flex flex-col items-center justify-center h-44">
+              <span className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-300">
                 📝
               </span>
-              <h3 className="text-2xl font-bold text-slate-800 group-hover:text-cyan-700 transition-colors">
+              <h3 className="text-xl font-bold text-slate-800 group-hover:text-cyan-700 transition-colors">
                 Attendance
               </h3>
-              <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
                 Mark Logs
               </p>
             </div>
           </Link>
 
-          {/* CARD 2: VIEW HISTORY (Now Active Link) */}
+          {/* CARD 2: VIEW HISTORY */}
           <Link href="/history" className="group block cursor-pointer">
-            <div className="p-8 bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-xl hover:border-cyan-500/30 transition-all duration-300 text-center flex flex-col items-center justify-center h-48">
-              <span className="text-5xl mb-4 group-hover:scale-110 transition-transform duration-300">
+            <div className="p-6 bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-xl hover:border-cyan-500/30 transition-all duration-300 text-center flex flex-col items-center justify-center h-44">
+              <span className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-300">
                 📊
               </span>
-              <h3 className="text-2xl font-bold text-slate-800 group-hover:text-cyan-700 transition-colors">
+              <h3 className="text-xl font-bold text-slate-800 group-hover:text-cyan-700 transition-colors">
                 View History
               </h3>
-              <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
                 Database Archives
+              </p>
+            </div>
+          </Link>
+
+          {/* CARD 3: FEE LEDGER */}
+          <Link href="/fees" className="group block cursor-pointer">
+            <div className="p-6 bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-xl hover:border-cyan-500/30 transition-all duration-300 text-center flex flex-col items-center justify-center h-44">
+              <span className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-300">
+                💳
+              </span>
+              <h3 className="text-xl font-bold text-slate-800 group-hover:text-cyan-700 transition-colors">
+                Fee Ledger
+              </h3>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
+                Accounts Ledger
               </p>
             </div>
           </Link>
@@ -181,7 +196,7 @@ export default function Home() {
               Welcome to Afflatus Portal
             </h5>
             <p className="text-xs md:text-sm text-cyan-700 mt-1">
-              Security protocols active. Active teacher session tracking system verified.
+              Level 3 feature stack successfully initiated. Attendance tracking, database history pipelines, and centralized account ledgers verified.
             </p>
           </div>
         </div>
