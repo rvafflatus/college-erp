@@ -154,18 +154,20 @@ export default function Home() {
             </div>
           </Link>
 
-          {/* CARD 2: FEE LEDGER (Coming Soon Static Card) */}
-          <div className="p-8 bg-slate-100/70 border border-slate-200/50 rounded-2xl text-center flex flex-col items-center justify-center h-48 opacity-60">
-            <span className="text-5xl mb-4 grayscale">
-              💳
-            </span>
-            <h3 className="text-2xl font-bold text-slate-400">
-              Fee Ledger
-            </h3>
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
-              Coming Soon
-            </p>
-          </div>
+          {/* CARD 2: VIEW HISTORY (Now Active Link) */}
+          <Link href="/history" className="group block cursor-pointer">
+            <div className="p-8 bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-xl hover:border-cyan-500/30 transition-all duration-300 text-center flex flex-col items-center justify-center h-48">
+              <span className="text-5xl mb-4 group-hover:scale-110 transition-transform duration-300">
+                📊
+              </span>
+              <h3 className="text-2xl font-bold text-slate-800 group-hover:text-cyan-700 transition-colors">
+                View History
+              </h3>
+              <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
+                Database Archives
+              </p>
+            </div>
+          </Link>
 
         </div>
 
