@@ -9,7 +9,9 @@ const supabase = createClient(
 );
 
 export default function AttendancePage() {
-  const [students, setStudents] = useState<any[]>([]);
+  const [allStudents, setAllStudents] = useState<any[]>([]);
+  const [filteredStudents, setFilteredStudents] = useState<any[]>([]);
+  const [selectedCourse, setSelectedCourse] = useState('All Courses');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -24,12 +26,14 @@ export default function AttendancePage() {
         
         if (error) throw error;
         
-        // Add a default local state status 'Present' for tracking toggles
+        // Map default local state status 'Present'
         const trackingData = (data || []).map(student => ({
           ...student,
           status: 'Present' 
         }));
-        setStudents(trackingData);
+        
+        setAllStudents(trackingData);
+        setFilteredStudents(trackingData); // Default show all
       } catch (error) {
         console.error('Error connecting to database:', error);
       } finally {
@@ -39,9 +43,18 @@ export default function AttendancePage() {
     fetchStudents();
   }, []);
 
-  // Toggle internal tracking array between Present and Absent
+  // Filter students dynamically whenever the selected course changes
+  useEffect(() => {
+    if (selectedCourse === 'All Courses') {
+      setFilteredStudents(allStudents);
+    } else {
+      setFilteredStudents(allStudents.filter(s => s.course === selectedCourse));
+    }
+  }, [selectedCourse, allStudents]);
+
+  // Toggle local status between Present and Absent
   const toggleStatus = (id: number) => {
-    setStudents(prev => prev.map(student => {
+    setAllStudents(prev => prev.map(student => {
       if (student.id === id) {
         return { ...student, status: student.status === 'Present' ? 'Absent' : 'Present' };
       }
@@ -49,15 +62,20 @@ export default function AttendancePage() {
     }));
   };
 
-  // Submit logs down to the backend database
+  // Submit logs to the backend database
   const handleSubmitLogs = async () => {
     setSubmitting(true);
     try {
-      // Build rows for batch injection
-      const logRows = students.map(student => ({
+      // Build rows only for the currently filtered/displayed students
+      const logRows = filteredStudents.map(student => ({
         student_id: student.id,
         status: student.status
       }));
+
+      if (logRows.length === 0) {
+        alert('No students selected in this batch filter.');
+        return;
+      }
 
       const { error } = await supabase
         .from('attendance_logs')
@@ -65,14 +83,17 @@ export default function AttendancePage() {
 
       if (error) throw error;
 
-      alert('Shabaash! Attendance logs synchronized with cloud servers.');
+      alert(`Shabaash! Attendance logs for ${selectedCourse} saved to cloud.`);
     } catch (error) {
       console.error('Error submitting records:', error);
-      alert('Submission failed. Check your database network connection.');
+      alert('Submission failed.');
     } finally {
       setSubmitting(false);
     }
   };
+
+  // Extract unique courses for the dropdown menu dynamically
+  const uniqueCourses = ['All Courses', ...Array.from(new Set(allStudents.map(s => s.course || 'B.A. 1st Year')))];
 
   return (
     <main className="min-h-screen bg-slate-50 flex flex-col items-center">
@@ -93,31 +114,51 @@ export default function AttendancePage() {
           <h2 className="text-3xl font-extrabold text-slate-800 mb-2">
             Daily Attendance Roster
           </h2>
-          <p className="text-slate-500 font-medium">
-            Toggle indicators and submit to save historical logs to the cloud database.
-          </p>
+          <p className="text-slate-500 font-medium">Select course filter to manage specific classrooms.</p>
+        </div>
+
+        {/* BATCH FILTER DROPDOWN */}
+        <div className="max-w-xs mx-auto mb-6">
+          <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-2 text-center">
+            Select Class / Batch
+          </label>
+          <select
+            value={selectedCourse}
+            onChange={(e) => setSelectedCourse(e.target.value)}
+            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-cyan-600 font-bold text-sm shadow-sm transition-all"
+          >
+            {uniqueCourses.map((course, idx) => (
+              <option key={idx} value={course}>{course}</option>
+            ))}
+          </select>
         </div>
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-800 mb-4"></div>
-            <p className="text-slate-500 font-medium animate-pulse">Syncing with Supabase Cloud Database...</p>
+            <p className="text-slate-500 font-medium animate-pulse">Syncing Roster...</p>
           </div>
         ) : (
           <div className="bg-white border border-slate-100 shadow-sm rounded-2xl overflow-hidden">
             <div className="divide-y divide-slate-100">
-              {students.length === 0 ? (
-                <div className="p-8 text-center text-slate-400">
-                  No active student profiles discovered inside table schema.
+              {filteredStudents.length === 0 ? (
+                <div className="p-12 text-center text-slate-400 font-medium">
+                  No active student profiles found under "{selectedCourse}".
                 </div>
               ) : (
-                students.map((student) => (
+                filteredStudents.map((student) => (
                   <div key={student.id} className="p-4 sm:p-6 flex justify-between items-center bg-white hover:bg-slate-50/50 transition-colors">
                     <div>
                       <h4 className="text-lg font-bold text-slate-800">{student.name}</h4>
-                      <p className="text-xs font-bold text-cyan-700 uppercase tracking-wide mt-0.5">
-                        Roll ID: {student.roll_number}
-                      </p>
+                      <div className="flex gap-2 items-center mt-0.5">
+                        <p className="text-xs font-bold text-cyan-700 uppercase tracking-wide">
+                          Roll ID: {student.roll_number}
+                        </p>
+                        <span className="text-slate-300 text-xs">•</span>
+                        <span className="bg-slate-100 text-slate-600 text-[10px] px-2 py-0.5 rounded font-bold uppercase">
+                          {student.course}
+                        </span>
+                      </div>
                     </div>
                     
                     <button 
@@ -138,10 +179,10 @@ export default function AttendancePage() {
             <div className="bg-slate-50/50 border-t border-slate-100 p-4 flex justify-end">
               <button 
                 onClick={handleSubmitLogs}
-                disabled={submitting || students.length === 0}
+                disabled={submitting || filteredStudents.length === 0}
                 className="bg-cyan-800 hover:bg-cyan-900 disabled:bg-slate-300 text-white font-bold text-sm uppercase tracking-wider px-6 py-2.5 rounded-xl shadow-sm transition-all"
               >
-                {submitting ? 'Saving to Database...' : 'Submit Logs'}
+                {submitting ? 'Saving Logs...' : `Submit ${selectedCourse} Logs`}
               </button>
             </div>
           </div>
