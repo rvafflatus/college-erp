@@ -25,7 +25,7 @@ export default function Home() {
   const [courseList, setCourseList] = useState<any[]>([]);
 
   // Admin Form States
-  const [activeAdminTab, setActiveAdminTab] = useState<'overview' | 'add_student' | 'add_teacher' | 'add_course'>('overview');
+  const [activeAdminTab, setActiveAdminTab] = useState<'overview' | 'add_course' | 'add_student' | 'add_teacher'>('overview');
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentRoll, setNewStudentRoll] = useState('');
   const [newStudentCourse, setNewStudentCourse] = useState('');
@@ -38,6 +38,17 @@ export default function Home() {
   
   const [adminSuccessMsg, setAdminSuccessMsg] = useState('');
   const [adminErrMsg, setAdminErrMsg] = useState('');
+
+  // Printable Receipt State
+  const [generatedReceipt, setGeneratedReceipt] = useState<{
+    name: string;
+    roll: number;
+    course: string;
+    fees: number;
+    loginId: string;
+    tempPass: string;
+    date: string;
+  } | null>(null);
 
   useEffect(() => {
     const cachedRole = localStorage.getItem('afflatus_user_role');
@@ -129,13 +140,14 @@ export default function Home() {
     setUsername('');
     setPassword('');
     setActiveAdminTab('overview');
+    setGeneratedReceipt(null);
   };
 
-  // Safely Create Student with Roll Validation Checks
   const handleCreateStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdminSuccessMsg('');
     setAdminErrMsg('');
+    setGeneratedReceipt(null);
 
     const rollNum = parseInt(newStudentRoll);
     const selectedBatch = newStudentCourse || (courseList[0]?.course_name);
@@ -146,7 +158,6 @@ export default function Home() {
     }
 
     try {
-      // Check if Roll Number already exists to prevent duplicate failures
       const { data: existingStudent } = await supabase
         .from('students')
         .select('id, name')
@@ -154,11 +165,10 @@ export default function Home() {
         .maybeSingle();
 
       if (existingStudent) {
-        setAdminErrMsg(`Roll ID ${rollNum} is already assigned to ${existingStudent.name}. Use a unique Roll Number.`);
+        setAdminErrMsg(`Roll ID ${rollNum} is already assigned to ${existingStudent.name}.`);
         return;
       }
 
-      // Step 1: Insert Student Profile row
       const { data: studentData, error: studentErr } = await supabase
         .from('students')
         .insert([{ name: newStudentName.trim(), roll_number: rollNum, course: selectedBatch }])
@@ -167,29 +177,38 @@ export default function Home() {
 
       if (studentErr || !studentData) throw new Error('Student profile block failed.');
 
-      // Step 2: Insert matching financial row ledger card
       const { error: feeErr } = await supabase
         .from('fee_ledger')
         .insert([{ student_id: studentData.id, total_fees: parseFloat(newStudentFees), fees_paid: 0 }]);
 
       if (feeErr) {
-        // Cleanup orphaned student row if subsequent steps fail
         await supabase.from('students').delete().eq('id', studentData.id);
         throw new Error('Fee ledger configuration failed.');
       }
 
-      // Step 3: Register unique client credential gateway
       const studentUsername = newStudentName.trim().toLowerCase().replace(/\s+/g, '');
+      const tempPassword = 'student123';
       const { error: userErr } = await supabase
         .from('portal_users')
-        .insert([{ username: studentUsername, password: 'student123', role: 'student', associated_course: selectedBatch, student_id: studentData.id }]);
+        .insert([{ username: studentUsername, password: tempPassword, role: 'student', associated_course: selectedBatch, student_id: studentData.id }]);
 
       if (userErr) {
         await supabase.from('students').delete().eq('id', studentData.id);
-        throw new Error('User authentication gateway generation failed.');
+        throw new Error('User gateway generation failed.');
       }
 
-      setAdminSuccessMsg(`Shabaash! ${newStudentName.trim()} admitted cleanly. Portal Login ID: "${studentUsername}"`);
+      // Populate printable object data structure state securely
+      setGeneratedReceipt({
+        name: newStudentName.trim(),
+        roll: rollNum,
+        course: selectedBatch,
+        fees: parseFloat(newStudentFees),
+        loginId: studentUsername,
+        tempPass: tempPassword,
+        date: new Date().toLocaleDateString('en-IN')
+      });
+
+      setAdminSuccessMsg(`Shabaash! Admission form registered successfully.`);
       setNewStudentName('');
       setNewStudentRoll('');
       loadMetrics();
@@ -211,11 +230,11 @@ export default function Home() {
 
       if (courseErr) throw courseErr;
 
-      setAdminSuccessMsg(`Success! New course track "${newCourseName}" active inside ERP databases.`);
+      setAdminSuccessMsg(`Success! New course track "${newCourseName}" active.`);
       setNewCourseName('');
       fetchCourses();
     } catch (err) {
-      setAdminErrMsg('Course name identification token already registered.');
+      setAdminErrMsg('Course track already registered.');
     }
   };
 
@@ -231,12 +250,17 @@ export default function Home() {
 
       if (teacherErr) throw teacherErr;
 
-      setAdminSuccessMsg(`Success! Faculty profile user "${newTeacherUser}" ready.`);
+      setAdminSuccessMsg(`Success! Instructor profile "${newTeacherUser}" ready.`);
       setNewTeacherUser('');
       setNewTeacherPass('');
     } catch (err) {
-      setAdminErrMsg('Username registration token already exists.');
+      setAdminErrMsg('Username already exists.');
     }
+  };
+
+  // Standard JavaScript command to invoke standard printing frameworks
+  const triggerNativePrint = () => {
+    window.print();
   };
 
   // --- SCREEN 1: LOGIN GATEWAY ---
@@ -266,8 +290,10 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 flex flex-col items-center">
-      <header className="w-full bg-cyan-800 text-white px-6 py-4 md:px-12 flex flex-col md:flex-row justify-between items-start md:items-center shadow-md">
+    <main className="min-h-screen bg-slate-50 flex flex-col items-center print:bg-white print:p-0">
+      
+      {/* HEADER BANNER - Hidden automatically during print layout configuration execution */}
+      <header className="w-full bg-cyan-800 text-white px-6 py-4 md:px-12 flex flex-col md:flex-row justify-between items-start md:items-center shadow-md print:hidden">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Afflatus ERP</h1>
           <p className="text-xs text-cyan-200 mt-1 uppercase tracking-wider font-semibold">Authorized Profile Access: {userRole?.toUpperCase()}</p>
@@ -275,9 +301,9 @@ export default function Home() {
         <button onClick={handleLogout} className="mt-3 md:mt-0 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-xl shadow-sm transition-all">Sign Out</button>
       </header>
 
-      <section className="w-full max-w-5xl px-4 py-12 flex-grow">
+      <section className="w-full max-w-5xl px-4 py-12 flex-grow print:py-0 print:max-w-full">
         
-        <div className="text-center mb-8">
+        <div className="text-center mb-8 print:hidden">
           <h2 className="text-3xl font-extrabold text-slate-800">
             {userRole === 'admin' && "Institutional Administrative Control Hub"}
             {userRole === 'teacher' && "Staff Instruction Command Room"}
@@ -286,7 +312,8 @@ export default function Home() {
           <p className="text-slate-500 font-medium mt-1">Secure real-time cloud data synchronization verified.</p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl mx-auto mb-8">
+        {/* Global Summary Info Bars - Hidden during prints */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl mx-auto mb-8 print:hidden">
           <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm text-center">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{userRole === 'student' ? 'Enrolled Course' : 'Total Managed Registry'}</p>
             <h3 className="text-2xl font-black text-cyan-800 mt-1">{loadingMetrics ? '...' : userRole === 'student' ? `${userMeta?.associated_course}` : `${metrics.students} Active Profiles`}</h3>
@@ -297,13 +324,16 @@ export default function Home() {
           </div>
         </div>
 
+        {/* ========================================================================= */}
+        {/* ⚙️ EXCLUSIVE ADMIN CONTROL UTILITY PANEL BLOCK */}
+        {/* ========================================================================= */}
         {userRole === 'admin' && (
-          <div className="max-w-4xl mx-auto bg-white border border-slate-200/60 rounded-3xl shadow-md overflow-hidden mb-10">
+          <div className="max-w-4xl mx-auto bg-white border border-slate-200/60 rounded-3xl shadow-md overflow-hidden mb-10 print:hidden">
             <div className="bg-slate-50 border-b border-slate-100 px-6 py-3 flex gap-3 overflow-x-auto">
-              <button onClick={() => { setActiveAdminTab('overview'); setAdminSuccessMsg(''); setAdminErrMsg(''); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeAdminTab === 'overview' ? 'bg-cyan-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>Control Overview</button>
-              <button onClick={() => { setActiveAdminTab('add_course'); setAdminSuccessMsg(''); setAdminErrMsg(''); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeAdminTab === 'add_course' ? 'bg-cyan-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>+ Add New Course</button>
-              <button onClick={() => { setActiveAdminTab('add_student'); setAdminSuccessMsg(''); setAdminErrMsg(''); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeAdminTab === 'add_student' ? 'bg-cyan-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>+ Admit New Student</button>
-              <button onClick={() => { setActiveAdminTab('add_teacher'); setAdminSuccessMsg(''); setAdminErrMsg(''); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeAdminTab === 'add_teacher' ? 'bg-cyan-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>+ Register Teacher</button>
+              <button onClick={() => { setActiveAdminTab('overview'); setAdminSuccessMsg(''); setAdminErrMsg(''); setGeneratedReceipt(null); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeAdminTab === 'overview' ? 'bg-cyan-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>Control Overview</button>
+              <button onClick={() => { setActiveAdminTab('add_course'); setAdminSuccessMsg(''); setAdminErrMsg(''); setGeneratedReceipt(null); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeAdminTab === 'add_course' ? 'bg-cyan-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>+ Add New Course</button>
+              <button onClick={() => { setActiveAdminTab('add_student'); setAdminSuccessMsg(''); setAdminErrMsg(''); setGeneratedReceipt(null); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeAdminTab === 'add_student' ? 'bg-cyan-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>+ Admit New Student</button>
+              <button onClick={() => { setActiveAdminTab('add_teacher'); setAdminSuccessMsg(''); setAdminErrMsg(''); setGeneratedReceipt(null); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeAdminTab === 'add_teacher' ? 'bg-cyan-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>+ Register Teacher</button>
             </div>
 
             <div className="p-6 min-h-[220px]">
@@ -329,7 +359,7 @@ export default function Home() {
                 </form>
               )}
 
-              {activeAdminTab === 'add_student' && (
+              {activeAdminTab === 'add_student' && !generatedReceipt && (
                 <form onSubmit={handleCreateStudent} className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Full Student Name</label>
@@ -357,14 +387,83 @@ export default function Home() {
                 </form>
               )}
 
+              {/* ========================================================================= */}
+              {/* 📑 HIGH-IMPACT, CLEAN OFFICIAL ADMISSION RECEIPT SLIP SLIDE */}
+              {/* ========================================================================= */}
+              {activeAdminTab === 'add_student' && generatedReceipt && (
+                <div className="mt-2 max-w-xl mx-auto border-2 border-dashed border-slate-300 p-6 rounded-2xl bg-white shadow-inner relative print:border-none print:shadow-none print:p-0">
+                  
+                  {/* Receipt Header */}
+                  <div className="text-center border-b pb-4 mb-4">
+                    <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Afflatus Classes</h3>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Pratap Nagar, Jaipur • GST: 08AEFPV3954D1ZA</p>
+                    <h4 className="mt-2 text-xs font-extrabold bg-slate-100 text-slate-700 px-3 py-1 rounded-md inline-block uppercase tracking-wider">Official Student Admission Slip</h4>
+                  </div>
+
+                  {/* Receipt Body Meta */}
+                  <div className="space-y-2 text-xs text-left text-slate-600 mb-5">
+                    <div className="flex justify-between border-b border-slate-50 pb-1">
+                      <span className="font-bold text-slate-400 uppercase text-[10px]">Student Name</span>
+                      <span className="font-black text-slate-800">{generatedReceipt.name}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-slate-50 pb-1">
+                      <span className="font-bold text-slate-400 uppercase text-[10px]">Roll Number ID</span>
+                      <span className="font-bold text-slate-800">{generatedReceipt.roll}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-slate-50 pb-1">
+                      <span className="font-bold text-slate-400 uppercase text-[10px]">Assigned Batch</span>
+                      <span className="font-bold text-cyan-800">{generatedReceipt.course}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-slate-50 pb-1">
+                      <span className="font-bold text-slate-400 uppercase text-[10px]">Registration Date</span>
+                      <span className="font-medium text-slate-700">{generatedReceipt.date}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-slate-50 pb-1 bg-amber-50/40 p-1.5 rounded">
+                      <span className="font-bold text-amber-800 uppercase text-[10px]">Total Ledger Fee</span>
+                      <span className="font-black text-amber-800">₹{generatedReceipt.fees.toLocaleString()}</span>
+                    </div>
+
+                    {/* GATEWAY USERNAME & PASSWORD BOX */}
+                    <div className="mt-4 p-3 bg-cyan-50 border border-cyan-100 rounded-xl space-y-1 text-center">
+                      <p className="text-[10px] font-black uppercase text-cyan-800 tracking-wider">Digital Portal Login Credentials</p>
+                      <div className="flex justify-between text-xs pt-1 px-2">
+                        <span className="text-cyan-700 font-medium">Username: <strong className="font-black text-slate-800 selection:bg-cyan-200">{generatedReceipt.loginId}</strong></span>
+                        <span className="text-cyan-700 font-medium">Password: <strong className="font-black text-slate-800">{generatedReceipt.tempPass}</strong></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Receipt Footer Message */}
+                  <p className="text-[10px] font-medium text-slate-400 text-center leading-relaxed">
+                    Please visit **school.vipgaming.in** on your mobile browser to install the terminal application shortcut and track your live attendance metrics.
+                  </p>
+
+                  {/* Operational Print Action Buttons Container - Automatically omitted during printing */}
+                  <div className="mt-6 flex flex-wrap gap-2 justify-center print:hidden">
+                    <button 
+                      onClick={triggerNativePrint}
+                      className="bg-cyan-800 hover:bg-cyan-900 text-white text-xs font-bold uppercase tracking-wider px-5 py-2.5 rounded-xl shadow-sm transition-all"
+                    >
+                      🖨️ Print / Download Form PDF
+                    </button>
+                    <button 
+                      onClick={() => { setGeneratedReceipt(null); setAdminSuccessMsg(''); }}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all"
+                    >
+                      Close Receipt
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {activeAdminTab === 'add_teacher' && (
                 <form onSubmit={handleCreateTeacher} className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left max-w-2xl">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Teacher Login Username</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Teacher Username</label>
                     <input type="text" placeholder="e.g., sunil_sir" value={newTeacherUser} onChange={(e) => setNewTeacherUser(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-cyan-700 font-medium text-slate-800" required />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Secure Portal Access Password</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Secure Password</label>
                     <input type="text" placeholder="e.g., teacher123" value={newTeacherPass} onChange={(e) => setNewTeacherPass(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-cyan-700 font-medium text-slate-800" required />
                   </div>
                   <div className="md:col-span-2 pt-2">
@@ -376,7 +475,8 @@ export default function Home() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+        {/* Core Feature Layout Grids - Hidden during prints */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto print:hidden">
           <Link href="/attendance" className="p-6 bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-lg text-center flex flex-col items-center justify-center h-40 transition-all group">
             <span className="text-4xl mb-2 group-hover:scale-110 transition-transform">📝</span>
             <h4 className="text-lg font-bold text-slate-800">Attendance Roster</h4>
