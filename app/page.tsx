@@ -188,7 +188,7 @@ export default function Home() {
 
       const studentUsername = newStudentName.trim().toLowerCase().replace(/\s+/g, '');
       const tempPassword = 'student123';
-      const { error: userErr } = await supabase
+      const { error: userErr = null } = await supabase
         .from('portal_users')
         .insert([{ username: studentUsername, password: tempPassword, role: 'student', associated_course: selectedBatch, student_id: studentData.id }]);
 
@@ -197,7 +197,6 @@ export default function Home() {
         throw new Error('User gateway generation failed.');
       }
 
-      // Populate printable receipt layout state
       setGeneratedReceipt({
         name: newStudentName.trim(),
         roll: rollNum,
@@ -257,8 +256,11 @@ export default function Home() {
     }
   };
 
+  // Safe Printing Trigger with Timeout Delay
   const triggerNativePrint = () => {
-    window.print();
+    setTimeout(() => {
+      window.print();
+    }, 250); // Gives browser engine 250ms to finish rendering graphics text
   };
 
   // --- SCREEN 1: LOGIN GATEWAY ---
@@ -320,24 +322,21 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* ⚙️ ADMIN SYSTEM CONTROL PANEL */}
-        {/* ========================================================================= */}
         {userRole === 'admin' && (
-          <div className="max-w-4xl mx-auto bg-white border border-slate-200/60 rounded-3xl shadow-md overflow-hidden mb-10 print:hidden">
-            <div className="bg-slate-50 border-b border-slate-100 px-6 py-3 flex gap-3 overflow-x-auto">
+          <div className="max-w-4xl mx-auto bg-white border border-slate-200/60 rounded-3xl shadow-md overflow-hidden mb-10 print:shadow-none print:border-none print:bg-white">
+            <div className="bg-slate-50 border-b border-slate-100 px-6 py-3 flex gap-3 overflow-x-auto print:hidden">
               <button onClick={() => { setActiveAdminTab('overview'); setAdminSuccessMsg(''); setAdminErrMsg(''); setGeneratedReceipt(null); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeAdminTab === 'overview' ? 'bg-cyan-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>Control Overview</button>
               <button onClick={() => { setActiveAdminTab('add_course'); setAdminSuccessMsg(''); setAdminErrMsg(''); setGeneratedReceipt(null); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeAdminTab === 'add_course' ? 'bg-cyan-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>+ Add New Course</button>
               <button onClick={() => { setActiveAdminTab('add_student'); setAdminSuccessMsg(''); setAdminErrMsg(''); setGeneratedReceipt(null); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeAdminTab === 'add_student' ? 'bg-cyan-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>+ Admit New Student</button>
               <button onClick={() => { setActiveAdminTab('add_teacher'); setAdminSuccessMsg(''); setAdminErrMsg(''); setGeneratedReceipt(null); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeAdminTab === 'add_teacher' ? 'bg-cyan-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>+ Register Teacher</button>
             </div>
 
-            <div className="p-6 min-h-[220px]">
-              {adminSuccessMsg && !generatedReceipt && <p className="mb-4 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 p-3 rounded-xl text-center">{adminSuccessMsg}</p>}
-              {adminErrMsg && <p className="mb-4 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-100 p-3 rounded-xl text-center">{adminErrMsg}</p>}
+            <div className="p-6 min-h-[220px] print:p-0">
+              {adminSuccessMsg && !generatedReceipt && <p className="mb-4 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 p-3 rounded-xl text-center print:hidden">{adminSuccessMsg}</p>}
+              {adminErrMsg && <p className="mb-4 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-100 p-3 rounded-xl text-center print:hidden">{adminErrMsg}</p>}
 
               {activeAdminTab === 'overview' && (
-                <div className="text-left space-y-2">
+                <div className="text-left space-y-2 print:hidden">
                   <h4 className="text-sm font-extrabold text-slate-800 uppercase tracking-wide">Dynamic Content Configurations Active</h4>
                   <p className="text-xs text-slate-500 leading-relaxed">
                     Welcome to the master control engine. Use the management panels to scale your institution infrastructure. Adding a new course instantly loads it into the student registry dropdown selector logic across the portal systems.
@@ -346,7 +345,7 @@ export default function Home() {
               )}
 
               {activeAdminTab === 'add_course' && (
-                <form onSubmit={handleCreateCourse} className="flex flex-col sm:flex-row gap-3 text-left max-w-xl items-end">
+                <form onSubmit={handleCreateCourse} className="flex flex-col sm:flex-row gap-3 text-left max-w-xl items-end print:hidden">
                   <div className="flex-grow w-full">
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">New Course Name</label>
                     <input type="text" placeholder="e.g., Website Designing" value={newCourseName} onChange={(e) => setNewCourseName(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-cyan-700 font-medium text-slate-800" required />
@@ -355,62 +354,59 @@ export default function Home() {
                 </form>
               )}
 
-              {/* CHANGER RULE: If receipt generated, HIDE input fields and show the slip block cleanly */}
               {activeAdminTab === 'add_student' && (
                 generatedReceipt ? (
-                  <div className="max-w-xl mx-auto border-2 border-dashed border-slate-300 p-6 rounded-2xl bg-white shadow-inner relative print:border-none print:shadow-none print:p-0">
+                  /* EXCLUSIVE PRINT SECURE RECEIPT BODY BLOCK */
+                  <div className="max-w-xl mx-auto border-2 border-dashed border-slate-300 p-6 rounded-2xl bg-white shadow-inner relative print:border-none print:shadow-none print:p-0 print:text-black">
                     
-                    {/* Slip Header */}
-                    <div className="text-center border-b pb-4 mb-4">
-                      <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Afflatus Classes</h3>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Pratap Nagar, Jaipur • GST: 08AEFPV3954D1ZA</p>
-                      <h4 className="mt-2 text-xs font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-100 px-3 py-1 rounded-md inline-block uppercase tracking-wider">Admission Process Complete</h4>
+                    <div className="text-center border-b pb-4 mb-4 print:text-black">
+                      <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight print:text-black">Afflatus Classes</h3>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 print:text-slate-500">Pratap Nagar, Jaipur • GST: 08AEFPV3954D1ZA</p>
+                      <h4 className="mt-2 text-xs font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-100 px-3 py-1 rounded-md inline-block uppercase tracking-wider print:border-slate-300 print:text-black print:bg-slate-100">Admission Process Complete</h4>
                     </div>
 
-                    {/* Slip Rows */}
-                    <div className="space-y-2 text-xs text-left text-slate-600 mb-5">
-                      <div className="flex justify-between border-b border-slate-50 pb-1">
-                        <span className="font-bold text-slate-400 uppercase text-[10px]">Student Name</span>
-                        <span className="font-black text-slate-800">{generatedReceipt.name}</span>
+                    <div className="space-y-2 text-xs text-left text-slate-600 mb-5 print:text-black">
+                      <div className="flex justify-between border-b border-slate-50 pb-1 print:border-slate-100">
+                        <span className="font-bold text-slate-400 uppercase text-[10px] print:text-slate-500">Student Name</span>
+                        <span className="font-black text-slate-800 print:text-black">{generatedReceipt.name}</span>
                       </div>
-                      <div className="flex justify-between border-b border-slate-50 pb-1">
-                        <span className="font-bold text-slate-400 uppercase text-[10px]">Roll Number ID</span>
-                        <span className="font-bold text-slate-800">{generatedReceipt.roll}</span>
+                      <div className="flex justify-between border-b border-slate-50 pb-1 print:border-slate-100">
+                        <span className="font-bold text-slate-400 uppercase text-[10px] print:text-slate-500">Roll Number ID</span>
+                        <span className="font-bold text-slate-800 print:text-black">{generatedReceipt.roll}</span>
                       </div>
-                      <div className="flex justify-between border-b border-slate-50 pb-1">
-                        <span className="font-bold text-slate-400 uppercase text-[10px]">Assigned Batch</span>
-                        <span className="font-bold text-cyan-800">{generatedReceipt.course}</span>
+                      <div className="flex justify-between border-b border-slate-50 pb-1 print:border-slate-100">
+                        <span className="font-bold text-slate-400 uppercase text-[10px] print:text-slate-500">Assigned Batch</span>
+                        <span className="font-bold text-cyan-800 print:text-black">{generatedReceipt.course}</span>
                       </div>
-                      <div className="flex justify-between border-b border-slate-50 pb-1">
-                        <span className="font-bold text-slate-400 uppercase text-[10px]">Registration Date</span>
-                        <span className="font-medium text-slate-700">{generatedReceipt.date}</span>
+                      <div className="flex justify-between border-b border-slate-50 pb-1 print:border-slate-100">
+                        <span className="font-bold text-slate-400 uppercase text-[10px] print:text-slate-500">Registration Date</span>
+                        <span className="font-medium text-slate-700 print:text-black">{generatedReceipt.date}</span>
                       </div>
-                      <div className="flex justify-between border-b border-slate-50 pb-1 bg-slate-50 p-1.5 rounded">
-                        <span className="font-bold text-slate-500 uppercase text-[10px]">Course Account Fee</span>
-                        <span className="font-black text-slate-800">₹{generatedReceipt.fees.toLocaleString()}</span>
+                      <div className="flex justify-between border-b border-slate-50 pb-1 bg-slate-50 p-1.5 rounded print:bg-slate-100 print:border-slate-200">
+                        <span className="font-bold text-slate-500 uppercase text-[10px] print:text-slate-600">Course Account Fee</span>
+                        <span className="font-black text-slate-800 print:text-black">₹{generatedReceipt.fees.toLocaleString()}</span>
                       </div>
 
-                      {/* LOGIN CREDENTIAL DETAILS SLIP */}
-                      <div className="mt-5 p-4 bg-cyan-50 border border-cyan-100 rounded-xl space-y-2">
-                        <p className="text-[10px] font-black uppercase text-cyan-800 tracking-wider text-center">Student Portal Login Credentials</p>
-                        <div className="grid grid-cols-2 text-xs pt-1 border-t border-cyan-100/50 text-center gap-2">
-                          <div className="bg-white p-2 rounded-lg border border-cyan-100">
-                            <p className="text-[9px] text-slate-400 uppercase font-bold">Portal Username</p>
-                            <p className="font-black text-sm text-slate-800 mt-0.5">{generatedReceipt.loginId}</p>
+                      {/* PORTAL KEY INFRASTRUCTURE */}
+                      <div className="mt-5 p-4 bg-cyan-50 border border-cyan-100 rounded-xl space-y-2 print:bg-slate-50 print:border-slate-200">
+                        <p className="text-[10px] font-black uppercase text-cyan-800 tracking-wider text-center print:text-black">Student Portal Login Credentials</p>
+                        <div className="grid grid-cols-2 text-xs pt-1 border-t border-cyan-100/50 text-center gap-2 print:border-slate-200">
+                          <div className="bg-white p-2 rounded-lg border border-cyan-100 print:border-slate-300">
+                            <p className="text-[9px] text-slate-400 uppercase font-bold print:text-slate-500">Portal Username</p>
+                            <p className="font-black text-sm text-slate-800 print:text-black">{generatedReceipt.loginId}</p>
                           </div>
-                          <div className="bg-white p-2 rounded-lg border border-cyan-100">
-                            <p className="text-[9px] text-slate-400 uppercase font-bold">Portal Password</p>
-                            <p className="font-black text-sm text-slate-800 mt-0.5">{generatedReceipt.tempPass}</p>
+                          <div className="bg-white p-2 rounded-lg border border-cyan-100 print:border-slate-300">
+                            <p className="text-[9px] text-slate-400 uppercase font-bold print:text-slate-500">Portal Password</p>
+                            <p className="font-black text-sm text-slate-800 print:text-black">{generatedReceipt.tempPass}</p>
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    <p className="text-[10px] font-medium text-slate-400 text-center leading-relaxed">
+                    <p className="text-[10px] font-medium text-slate-400 text-center leading-relaxed print:text-slate-600">
                       Please use these credentials to log in at school.vipgaming.in to review personal records.
                     </p>
 
-                    {/* Actions */}
                     <div className="mt-6 flex flex-wrap gap-2 justify-center print:hidden">
                       <button 
                         onClick={triggerNativePrint}
@@ -427,7 +423,7 @@ export default function Home() {
                     </div>
                   </div>
                 ) : (
-                  <form onSubmit={handleCreateStudent} className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+                  <form onSubmit={handleCreateStudent} className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left print:hidden">
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Full Student Name</label>
                       <input type="text" placeholder="e.g., Dheeraj Mittal" value={newStudentName} onChange={(e) => setNewStudentName(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-cyan-700 font-medium text-slate-800" required />
@@ -456,7 +452,7 @@ export default function Home() {
               )}
 
               {activeAdminTab === 'add_teacher' && (
-                <form onSubmit={handleCreateTeacher} className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left max-w-2xl">
+                <form onSubmit={handleCreateTeacher} className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left max-w-2xl print:hidden">
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Teacher Username</label>
                     <input type="text" placeholder="e.g., sunil_sir" value={newTeacherUser} onChange={(e) => setNewTeacherUser(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-cyan-700 font-medium text-slate-800" required />
