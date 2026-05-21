@@ -49,7 +49,6 @@ export default function Home() {
     }
   }, []);
 
-  // Fetch dynamic courses array list from database storage
   const fetchCourses = async () => {
     try {
       const { data, error: courseErr } = await supabase
@@ -59,7 +58,7 @@ export default function Home() {
       if (!courseErr && data) {
         setCourseList(data);
         if (data.length > 0 && !newStudentCourse) {
-          setNewStudentCourse(data[0].course_name); // Set initial default choice dropdown
+          setNewStudentCourse(data[0].course_name);
         }
       }
     } catch (err) {
@@ -132,48 +131,74 @@ export default function Home() {
     setActiveAdminTab('overview');
   };
 
-  // Admin Operation: Insert New Student via Dropdown Course Selection
+  // Safely Create Student with Roll Validation Checks
   const handleCreateStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdminSuccessMsg('');
     setAdminErrMsg('');
 
-    if (!newStudentCourse) {
-      setAdminErrMsg('Please define or select a valid course course track.');
+    const rollNum = parseInt(newStudentRoll);
+    const selectedBatch = newStudentCourse || (courseList[0]?.course_name);
+
+    if (!selectedBatch) {
+      setAdminErrMsg('Please create a course track first before enrolling students.');
       return;
     }
 
     try {
+      // Check if Roll Number already exists to prevent duplicate failures
+      const { data: existingStudent } = await supabase
+        .from('students')
+        .select('id, name')
+        .eq('roll_number', rollNum)
+        .maybeSingle();
+
+      if (existingStudent) {
+        setAdminErrMsg(`Roll ID ${rollNum} is already assigned to ${existingStudent.name}. Use a unique Roll Number.`);
+        return;
+      }
+
+      // Step 1: Insert Student Profile row
       const { data: studentData, error: studentErr } = await supabase
         .from('students')
-        .insert([{ name: newStudentName, roll_number: parseInt(newStudentRoll), course: newStudentCourse }])
+        .insert([{ name: newStudentName.trim(), roll_number: rollNum, course: selectedBatch }])
         .select()
         .single();
 
-      if (studentErr || !studentData) throw studentErr;
+      if (studentErr || !studentData) throw new Error('Student profile block failed.');
 
+      // Step 2: Insert matching financial row ledger card
       const { error: feeErr } = await supabase
         .from('fee_ledger')
         .insert([{ student_id: studentData.id, total_fees: parseFloat(newStudentFees), fees_paid: 0 }]);
 
-      if (feeErr) throw feeErr;
+      if (feeErr) {
+        // Cleanup orphaned student row if subsequent steps fail
+        await supabase.from('students').delete().eq('id', studentData.id);
+        throw new Error('Fee ledger configuration failed.');
+      }
 
-      const studentUsername = newStudentName.toLowerCase().replace(/\s+/g, '');
-      await supabase
+      // Step 3: Register unique client credential gateway
+      const studentUsername = newStudentName.trim().toLowerCase().replace(/\s+/g, '');
+      const { error: userErr } = await supabase
         .from('portal_users')
-        .insert([{ username: studentUsername, password: 'student123', role: 'student', associated_course: newStudentCourse, student_id: studentData.id }]);
+        .insert([{ username: studentUsername, password: 'student123', role: 'student', associated_course: selectedBatch, student_id: studentData.id }]);
 
-      setAdminSuccessMsg(`Success! ${newStudentName} admitted to ${newStudentCourse}. Username login ID: "${studentUsername}"`);
+      if (userErr) {
+        await supabase.from('students').delete().eq('id', studentData.id);
+        throw new Error('User authentication gateway generation failed.');
+      }
+
+      setAdminSuccessMsg(`Shabaash! ${newStudentName.trim()} admitted cleanly. Portal Login ID: "${studentUsername}"`);
       setNewStudentName('');
       setNewStudentRoll('');
       loadMetrics();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setAdminErrMsg('Failed to register student parameters.');
+      setAdminErrMsg(err.message || 'Failed to complete registration pipelines.');
     }
   };
 
-  // Admin Operation: Create a New Course track entry
   const handleCreateCourse = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdminSuccessMsg('');
@@ -188,7 +213,7 @@ export default function Home() {
 
       setAdminSuccessMsg(`Success! New course track "${newCourseName}" active inside ERP databases.`);
       setNewCourseName('');
-      fetchCourses(); // Instantly update lists on dashboard dropdown filters
+      fetchCourses();
     } catch (err) {
       setAdminErrMsg('Course name identification token already registered.');
     }
@@ -240,7 +265,6 @@ export default function Home() {
     );
   }
 
-  // --- SCREEN 2: AUTHENTICATED PORTAL VIEW ---
   return (
     <main className="min-h-screen bg-slate-50 flex flex-col items-center">
       <header className="w-full bg-cyan-800 text-white px-6 py-4 md:px-12 flex flex-col md:flex-row justify-between items-start md:items-center shadow-md">
@@ -262,7 +286,6 @@ export default function Home() {
           <p className="text-slate-500 font-medium mt-1">Secure real-time cloud data synchronization verified.</p>
         </div>
 
-        {/* Global Overview Analytics Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl mx-auto mb-8">
           <div className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm text-center">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{userRole === 'student' ? 'Enrolled Course' : 'Total Managed Registry'}</p>
@@ -274,9 +297,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* ⚙️ EXCLUSIVE ADMIN CONTROL UTILITY PANEL WITH DROP-DOWN ARRAYS */}
-        {/* ========================================================================= */}
         {userRole === 'admin' && (
           <div className="max-w-4xl mx-auto bg-white border border-slate-200/60 rounded-3xl shadow-md overflow-hidden mb-10">
             <div className="bg-slate-50 border-b border-slate-100 px-6 py-3 flex gap-3 overflow-x-auto">
@@ -299,30 +319,26 @@ export default function Home() {
                 </div>
               )}
 
-              {/* NEW TAB: ADD COURSE FORMS */}
               {activeAdminTab === 'add_course' && (
                 <form onSubmit={handleCreateCourse} className="flex flex-col sm:flex-row gap-3 text-left max-w-xl items-end">
                   <div className="flex-grow w-full">
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">New Course Name / Batch Designation</label>
-                    <input type="text" placeholder="e.g., RSCIT New Batch, M.B.A. 1st Year" value={newCourseName} onChange={(e) => setNewCourseName(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-cyan-700 font-medium text-slate-800" required />
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">New Course Name</label>
+                    <input type="text" placeholder="e.g., RSCIT New Batch" value={newCourseName} onChange={(e) => setNewCourseName(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-cyan-700 font-medium text-slate-800" required />
                   </div>
                   <button type="submit" className="bg-cyan-800 hover:bg-cyan-900 text-white font-bold text-xs uppercase tracking-wider px-6 py-2.5 h-[34px] rounded-xl shadow-sm transition-all whitespace-nowrap">Save Course Track</button>
                 </form>
               )}
 
-              {/* STUDENT ADMISSION FORM (NOW DRIVEN BY DYNAMIC DROPDOWN) */}
               {activeAdminTab === 'add_student' && (
                 <form onSubmit={handleCreateStudent} className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Full Student Name</label>
-                    <input type="text" placeholder="e.g., Suresh Kumar" value={newStudentName} onChange={(e) => setNewStudentName(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-cyan-700 font-medium text-slate-800" required />
+                    <input type="text" placeholder="e.g., Dheeraj Mittal" value={newStudentName} onChange={(e) => setNewStudentName(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-cyan-700 font-medium text-slate-800" required />
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Unique Roll Number</label>
-                    <input type="number" placeholder="e.g., 105" value={newStudentRoll} onChange={(e) => setNewStudentRoll(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-cyan-700 font-medium text-slate-800" required />
+                    <input type="number" placeholder="e.g., 210" value={newStudentRoll} onChange={(e) => setNewStudentRoll(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-cyan-700 font-medium text-slate-800" required />
                   </div>
-                  
-                  {/* DYNAMIC COURSE SELECTOR DROPDOWN ROW */}
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Select Course Track</label>
                     <select value={newStudentCourse} onChange={(e) => setNewStudentCourse(e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-cyan-700 font-bold text-slate-800 h-[34px]">
@@ -331,7 +347,6 @@ export default function Home() {
                       ))}
                     </select>
                   </div>
-
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Course Total Base Fee (INR)</label>
                     <input type="number" value={newStudentFees} onChange={(e) => setNewStudentFees(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-cyan-700 font-medium text-slate-800" required />
@@ -361,7 +376,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Navigation Core Feature Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
           <Link href="/attendance" className="p-6 bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-lg text-center flex flex-col items-center justify-center h-40 transition-all group">
             <span className="text-4xl mb-2 group-hover:scale-110 transition-transform">📝</span>
