@@ -21,8 +21,11 @@ export default function Home() {
   const [metrics, setMetrics] = useState({ students: 0, pending: 0 });
   const [loadingMetrics, setLoadingMetrics] = useState(false);
 
+  // Master Lists from Database
+  const [courseList, setCourseList] = useState<any[]>([]);
+
   // Admin Form States
-  const [activeAdminTab, setActiveAdminTab] = useState<'overview' | 'add_student' | 'add_teacher'>('overview');
+  const [activeAdminTab, setActiveAdminTab] = useState<'overview' | 'add_student' | 'add_teacher' | 'add_course'>('overview');
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentRoll, setNewStudentRoll] = useState('');
   const [newStudentCourse, setNewStudentCourse] = useState('');
@@ -30,6 +33,8 @@ export default function Home() {
   
   const [newTeacherUser, setNewTeacherUser] = useState('');
   const [newTeacherPass, setNewTeacherPass] = useState('');
+
+  const [newCourseName, setNewCourseName] = useState('');
   
   const [adminSuccessMsg, setAdminSuccessMsg] = useState('');
   const [adminErrMsg, setAdminErrMsg] = useState('');
@@ -43,6 +48,24 @@ export default function Home() {
       setIsLoggedIn(true);
     }
   }, []);
+
+  // Fetch dynamic courses array list from database storage
+  const fetchCourses = async () => {
+    try {
+      const { data, error: courseErr } = await supabase
+        .from('courses')
+        .select('*')
+        .order('course_name', { ascending: true });
+      if (!courseErr && data) {
+        setCourseList(data);
+        if (data.length > 0 && !newStudentCourse) {
+          setNewStudentCourse(data[0].course_name); // Set initial default choice dropdown
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const loadMetrics = async () => {
     if (!isLoggedIn || !userRole) return;
@@ -67,7 +90,10 @@ export default function Home() {
   };
 
   useEffect(() => {
-    loadMetrics();
+    if (isLoggedIn) {
+      loadMetrics();
+      fetchCourses();
+    }
   }, [isLoggedIn, userRole, userMeta]);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -106,14 +132,18 @@ export default function Home() {
     setActiveAdminTab('overview');
   };
 
-  // Admin Operation: Insert New Student into Database Roster
+  // Admin Operation: Insert New Student via Dropdown Course Selection
   const handleCreateStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdminSuccessMsg('');
     setAdminErrMsg('');
 
+    if (!newStudentCourse) {
+      setAdminErrMsg('Please define or select a valid course course track.');
+      return;
+    }
+
     try {
-      // 1. Insert Profile into 'students' table
       const { data: studentData, error: studentErr } = await supabase
         .from('students')
         .insert([{ name: newStudentName, roll_number: parseInt(newStudentRoll), course: newStudentCourse }])
@@ -122,31 +152,48 @@ export default function Home() {
 
       if (studentErr || !studentData) throw studentErr;
 
-      // 2. Insert corresponding financial base record into 'fee_ledger' table
       const { error: feeErr } = await supabase
         .from('fee_ledger')
         .insert([{ student_id: studentData.id, total_fees: parseFloat(newStudentFees), fees_paid: 0 }]);
 
       if (feeErr) throw feeErr;
 
-      // 3. Auto-generate a student portal login account in 'portal_users' table
       const studentUsername = newStudentName.toLowerCase().replace(/\s+/g, '');
       await supabase
         .from('portal_users')
         .insert([{ username: studentUsername, password: 'student123', role: 'student', associated_course: newStudentCourse, student_id: studentData.id }]);
 
-      setAdminSuccessMsg(`Success! ${newStudentName} registered. Portal Login ID created: "${studentUsername}"`);
+      setAdminSuccessMsg(`Success! ${newStudentName} admitted to ${newStudentCourse}. Username login ID: "${studentUsername}"`);
       setNewStudentName('');
       setNewStudentRoll('');
-      setNewStudentCourse('');
-      loadMetrics(); // Refresh homepage counts
+      loadMetrics();
     } catch (err) {
       console.error(err);
-      setAdminErrMsg('Failed to inject records. Check constraint parameters.');
+      setAdminErrMsg('Failed to register student parameters.');
     }
   };
 
-  // Admin Operation: Register a New Faculty Teacher
+  // Admin Operation: Create a New Course track entry
+  const handleCreateCourse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminSuccessMsg('');
+    setAdminErrMsg('');
+
+    try {
+      const { error: courseErr } = await supabase
+        .from('courses')
+        .insert([{ course_name: newCourseName.trim() }]);
+
+      if (courseErr) throw courseErr;
+
+      setAdminSuccessMsg(`Success! New course track "${newCourseName}" active inside ERP databases.`);
+      setNewCourseName('');
+      fetchCourses(); // Instantly update lists on dashboard dropdown filters
+    } catch (err) {
+      setAdminErrMsg('Course name identification token already registered.');
+    }
+  };
+
   const handleCreateTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdminSuccessMsg('');
@@ -159,7 +206,7 @@ export default function Home() {
 
       if (teacherErr) throw teacherErr;
 
-      setAdminSuccessMsg(`Success! Instructor account "${newTeacherUser}" active in portal database.`);
+      setAdminSuccessMsg(`Success! Faculty profile user "${newTeacherUser}" ready.`);
       setNewTeacherUser('');
       setNewTeacherPass('');
     } catch (err) {
@@ -206,7 +253,6 @@ export default function Home() {
 
       <section className="w-full max-w-5xl px-4 py-12 flex-grow">
         
-        {/* Main Header Display Text */}
         <div className="text-center mb-8">
           <h2 className="text-3xl font-extrabold text-slate-800">
             {userRole === 'admin' && "Institutional Administrative Control Hub"}
@@ -229,36 +275,42 @@ export default function Home() {
         </div>
 
         {/* ========================================================================= */}
-        {/* ⚙️ SPECIAL ADAPTIVE WINDOW: EXCLUSIVE ADMIN CONTROL SUB-PANEL */}
+        {/* ⚙️ EXCLUSIVE ADMIN CONTROL UTILITY PANEL WITH DROP-DOWN ARRAYS */}
         {/* ========================================================================= */}
         {userRole === 'admin' && (
           <div className="max-w-4xl mx-auto bg-white border border-slate-200/60 rounded-3xl shadow-md overflow-hidden mb-10">
-            {/* Inner Dashboard Admin Tabs Header Nav */}
             <div className="bg-slate-50 border-b border-slate-100 px-6 py-3 flex gap-3 overflow-x-auto">
-              <button onClick={() => { setActiveAdminTab('overview'); setAdminSuccessMsg(''); setAdminErrMsg(''); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeAdminTab === 'overview' ? 'bg-cyan-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>Control Panel Overview</button>
+              <button onClick={() => { setActiveAdminTab('overview'); setAdminSuccessMsg(''); setAdminErrMsg(''); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeAdminTab === 'overview' ? 'bg-cyan-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>Control Overview</button>
+              <button onClick={() => { setActiveAdminTab('add_course'); setAdminSuccessMsg(''); setAdminErrMsg(''); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeAdminTab === 'add_course' ? 'bg-cyan-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>+ Add New Course</button>
               <button onClick={() => { setActiveAdminTab('add_student'); setAdminSuccessMsg(''); setAdminErrMsg(''); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeAdminTab === 'add_student' ? 'bg-cyan-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>+ Admit New Student</button>
-              <button onClick={() => { setActiveAdminTab('add_teacher'); setAdminSuccessMsg(''); setAdminErrMsg(''); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeAdminTab === 'add_teacher' ? 'bg-cyan-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>+ Register New Teacher</button>
+              <button onClick={() => { setActiveAdminTab('add_teacher'); setAdminSuccessMsg(''); setAdminErrMsg(''); }} className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeAdminTab === 'add_teacher' ? 'bg-cyan-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>+ Register Teacher</button>
             </div>
 
             <div className="p-6 min-h-[220px]">
               {adminSuccessMsg && <p className="mb-4 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 p-3 rounded-xl text-center">{adminSuccessMsg}</p>}
               {adminErrMsg && <p className="mb-4 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-100 p-3 rounded-xl text-center">{adminErrMsg}</p>}
 
-              {/* TAB 1: ADMIN OVERVIEW PANEL INTERACTION GUIDE */}
               {activeAdminTab === 'overview' && (
                 <div className="text-left space-y-2">
-                  <h4 className="text-sm font-extrabold text-slate-800 uppercase tracking-wide">Administrative Tools Operational</h4>
+                  <h4 className="text-sm font-extrabold text-slate-800 uppercase tracking-wide">Dynamic Content Configurations Active</h4>
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    Welcome to the core management terminal. Use the action utility bars above to directly insert verified parameters into the database layer. Every newly admitted profile will automatically compute across billing ledgers and generate custom client login metrics dynamically.
+                    Welcome to the master control engine. Use the management panels to scale your institution infrastructure. Adding a new course instantly loads it into the student registry dropdown selector logic across the portal systems.
                   </p>
-                  <div className="pt-4 flex gap-2">
-                    <span className="bg-cyan-50 border border-cyan-100 text-cyan-800 text-[10px] font-bold px-2.5 py-1 rounded">Real-Time Sync Online</span>
-                    <span className="bg-purple-50 border border-purple-100 text-purple-800 text-[10px] font-bold px-2.5 py-1 rounded">Relational Keys Active</span>
-                  </div>
                 </div>
               )}
 
-              {/* TAB 2: ACTIVE NEW STUDENT ADMISSION FORM OPERATION */}
+              {/* NEW TAB: ADD COURSE FORMS */}
+              {activeAdminTab === 'add_course' && (
+                <form onSubmit={handleCreateCourse} className="flex flex-col sm:flex-row gap-3 text-left max-w-xl items-end">
+                  <div className="flex-grow w-full">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">New Course Name / Batch Designation</label>
+                    <input type="text" placeholder="e.g., RSCIT New Batch, M.B.A. 1st Year" value={newCourseName} onChange={(e) => setNewCourseName(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-cyan-700 font-medium text-slate-800" required />
+                  </div>
+                  <button type="submit" className="bg-cyan-800 hover:bg-cyan-900 text-white font-bold text-xs uppercase tracking-wider px-6 py-2.5 h-[34px] rounded-xl shadow-sm transition-all whitespace-nowrap">Save Course Track</button>
+                </form>
+              )}
+
+              {/* STUDENT ADMISSION FORM (NOW DRIVEN BY DYNAMIC DROPDOWN) */}
               {activeAdminTab === 'add_student' && (
                 <form onSubmit={handleCreateStudent} className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
                   <div>
@@ -269,21 +321,27 @@ export default function Home() {
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Unique Roll Number</label>
                     <input type="number" placeholder="e.g., 105" value={newStudentRoll} onChange={(e) => setNewStudentRoll(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-cyan-700 font-medium text-slate-800" required />
                   </div>
+                  
+                  {/* DYNAMIC COURSE SELECTOR DROPDOWN ROW */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Assign Course Batch Name</label>
-                    <input type="text" placeholder="e.g., RSCIT, B.C.A. 1st Year" value={newStudentCourse} onChange={(e) => setNewStudentCourse(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-cyan-700 font-medium text-slate-800" required />
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Select Course Track</label>
+                    <select value={newStudentCourse} onChange={(e) => setNewStudentCourse(e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-cyan-700 font-bold text-slate-800 h-[34px]">
+                      {courseList.map((course) => (
+                        <option key={course.id} value={course.course_name}>{course.course_name}</option>
+                      ))}
+                    </select>
                   </div>
+
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Tuition Course Fee Amount (INR)</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Course Total Base Fee (INR)</label>
                     <input type="number" value={newStudentFees} onChange={(e) => setNewStudentFees(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-cyan-700 font-medium text-slate-800" required />
                   </div>
                   <div className="md:col-span-2 pt-2">
-                    <button type="submit" className="bg-cyan-800 hover:bg-cyan-900 text-white font-bold text-xs uppercase tracking-wider px-6 py-2 rounded-xl shadow-sm transition-all">Execute Admission Registration</button>
+                    <button type="submit" className="bg-cyan-800 hover:bg-cyan-900 text-white font-bold text-xs uppercase tracking-wider px-6 py-2 rounded-xl shadow-sm transition-all">Admit Student</button>
                   </div>
                 </form>
               )}
 
-              {/* TAB 3: REGISTER NEW TEACHER FACULTY METHOD ACCOUNT */}
               {activeAdminTab === 'add_teacher' && (
                 <form onSubmit={handleCreateTeacher} className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left max-w-2xl">
                   <div>
@@ -303,46 +361,25 @@ export default function Home() {
           </div>
         )}
 
-        {/* System Core Interface Operation Links Navigation Cards */}
+        {/* Navigation Core Feature Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-          
-          {/* CARD 1: MARK ATTENDANCE */}
-          {(userRole === 'admin' || userRole === 'teacher') ? (
-            <Link href="/attendance" className="p-6 bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-lg text-center flex flex-col items-center justify-center h-40 transition-all group">
-              <span className="text-4xl mb-2 group-hover:scale-110 transition-transform">📝</span>
-              <h4 className="text-lg font-bold text-slate-800">Attendance Roster</h4>
-              <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Mark Logs</p>
-            </Link>
-          ) : (
-            <div className="p-6 bg-slate-100/50 border border-slate-200/40 rounded-2xl text-center flex flex-col items-center justify-center h-40 opacity-50">
-              <span className="text-4xl mb-2 grayscale">📝</span>
-              <h4 className="text-lg font-bold text-slate-400">Attendance Managed</h4>
-              <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">By Faculty Instructor</p>
-            </div>
-          )}
+          <Link href="/attendance" className="p-6 bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-lg text-center flex flex-col items-center justify-center h-40 transition-all group">
+            <span className="text-4xl mb-2 group-hover:scale-110 transition-transform">📝</span>
+            <h4 className="text-lg font-bold text-slate-800">Attendance Roster</h4>
+            <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Mark Logs</p>
+          </Link>
 
-          {/* CARD 2: BALANCES / HISTORY LOGS */}
           <Link href={userRole === 'student' ? '/fees' : '/history'} className="p-6 bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-lg text-center flex flex-col items-center justify-center h-40 transition-all group">
             <span className="text-4xl mb-2 group-hover:scale-110 transition-transform">{userRole === 'student' ? '💳' : '📊'}</span>
             <h4 className="text-lg font-bold text-slate-800">{userRole === 'student' ? 'My Fee Balances' : 'Audit Logs History'}</h4>
             <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Inspect Database Feed</p>
           </Link>
 
-          {/* CARD 3: FEE MANAGEMENT (RESTRICTED FOR REGULAR TEACHERS, READ FOR STUDENTS, ADMIN UNLOCKED) */}
-          {userRole === 'teacher' ? (
-            <div className="p-6 bg-slate-100/50 border border-slate-200/40 rounded-2xl text-center flex flex-col items-center justify-center h-40 opacity-50">
-              <span className="text-4xl mb-2 grayscale">💳</span>
-              <h4 className="text-lg font-bold text-slate-400">Accounts Ledger</h4>
-              <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Admin Access Only</p>
-            </div>
-          ) : (
-            <Link href="/fees" className="p-6 bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-lg text-center flex flex-col items-center justify-center h-40 transition-all group">
-              <span className="text-4xl mb-2 group-hover:scale-110 transition-transform">💰</span>
-              <h4 className="text-lg font-bold text-slate-800">{userRole === 'student' ? 'My Performance' : 'Fee Ledger Management'}</h4>
-              <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Inspect Ledger System</p>
-            </Link>
-          )}
-
+          <Link href="/fees" className="p-6 bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-lg text-center flex flex-col items-center justify-center h-40 transition-all group">
+            <span className="text-4xl mb-2 group-hover:scale-110 transition-transform">💰</span>
+            <h4 className="text-lg font-bold text-slate-800">{userRole === 'student' ? 'My Performance' : 'Fee Ledger Management'}</h4>
+            <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Inspect Ledger System</p>
+          </Link>
         </div>
       </section>
     </main>
